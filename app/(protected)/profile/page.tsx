@@ -10,6 +10,11 @@ import { MapPin, Mail, Building2, GraduationCap } from "lucide-react";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
 
 // --- GitHub-style contribution grid (fake data) ---
+function seededRandom(seed: number) {
+  const value = Math.sin(seed) * 10000;
+  return value - Math.floor(value);
+}
+
 function generateContributions() {
   const weeks = 52;
   const days = 7;
@@ -18,7 +23,7 @@ function generateContributions() {
     const week: number[] = [];
     for (let d = 0; d < days; d++) {
       // weighted toward lower values for realism
-      const rand = Math.random();
+      const rand = seededRandom(w * days + d + 1);
       if (rand < 0.35) week.push(0);
       else if (rand < 0.6) week.push(1);
       else if (rand < 0.8) week.push(2);

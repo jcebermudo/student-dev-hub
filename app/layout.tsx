@@ -23,8 +23,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={cn("h-full", "antialiased", spaceGrotesk.variable, "font-sans")}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
