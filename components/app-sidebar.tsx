@@ -22,7 +22,7 @@ import {
 const NAV_ITEMS = [
   { title: "Match", href: "/jobs", icon: HiSparkles },
   { title: "Hackathons", href: "/hackathons", icon: HiTrophy },
-  { title: "Profile", href: "/", avatar: true },
+  { title: "Profile", href: "/profile", avatar: true },
 ]
 
 export function AppSidebar() {
