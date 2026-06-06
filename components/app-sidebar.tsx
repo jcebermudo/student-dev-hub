@@ -31,8 +31,15 @@ const NAV_ITEMS = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { state } = useSidebar()
-  const { signOut } = useAuth()
+  const { user, signOut } = useAuth()
   const collapsed = state === "collapsed"
+  const profileName = user?.displayName ?? "Profile"
+  const profileInitials = profileName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <Sidebar collapsible="icon">
@@ -58,8 +65,8 @@ export function AppSidebar() {
                     <Link href={item.href}>
                       {item.avatar ? (
                         <Avatar className="h-5 w-5">
-                          <AvatarImage src="/images/people/nico-reyes.jpg" alt="Profile" />
-                          <AvatarFallback className="text-[8px]">NR</AvatarFallback>
+                          <AvatarImage src={user?.photoURL ?? undefined} alt={profileName} />
+                          <AvatarFallback className="text-[8px]">{profileInitials}</AvatarFallback>
                         </Avatar>
                       ) : (
                         item.icon && <item.icon className={pathname === item.href ? "" : "text-muted-foreground"} />

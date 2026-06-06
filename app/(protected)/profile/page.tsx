@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useMemo } from "react";
 import {
   Avatar,
   AvatarFallback,
@@ -6,8 +9,11 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Mail, Building2, GraduationCap } from "lucide-react";
+import { MapPin, Mail } from "lucide-react";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { useAuth } from "@/contexts/auth-context";
+import { db } from "@/lib/firebase";
 
 // --- GitHub-style contribution grid (fake data) ---
 function seededRandom(seed: number) {
@@ -88,22 +94,66 @@ const SKILLS = [
   "PostgreSQL",
 ];
 
+const MOCK_PROFILE = {
+  headline: "CS @ ADMU",
+  location: "Manila, PH",
+  about:
+    "I'm a passionate CS student who loves distributed systems and language design. Currently exploring compilers, low-level networking, and building tools that make developers' lives easier.",
+  experiences: EXPERIENCES,
+  education: EDUCATION,
+  skills: SKILLS,
+};
+
 export default function ProfilePage() {
+  const { user } = useAuth();
+
+  const displayName = user?.displayName ?? "Nico Reyes";
+  const email = user?.email ?? "";
+  const photoURL = user?.photoURL ?? "/images/people/nico-reyes.jpg";
+  const username = email ? email.split("@")[0] : "nico";
+  const initials = useMemo(
+    () =>
+      displayName
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    [displayName]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+
+    setDoc(
+      doc(db, "users", user.uid),
+      {
+        uid: user.uid,
+        name: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+        ...MOCK_PROFILE,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }, [user]);
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-16 space-y-8">
       {/* ── Header ── */}
       <div className="flex items-center gap-5">
         <Avatar className="h-20 w-20 border-2 border-border">
-          <AvatarImage src="/images/people/nico-reyes.jpg" alt="Nico Reyes" />
+          <AvatarImage src={photoURL} alt={displayName} />
           <AvatarFallback className="text-2xl font-semibold bg-muted">
-            NR
+            {initials}
           </AvatarFallback>
         </Avatar>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Nico Reyes <span className="text-muted-foreground font-normal text-base">@nico</span>
+            {displayName} <span className="text-muted-foreground font-normal text-base">@{username}</span>
           </h1>
-          <p className="text-muted-foreground">CS @ ADMU</p>
+          <p className="text-muted-foreground">{MOCK_PROFILE.headline}</p>
           <div className="flex items-center gap-3 mt-2 text-muted-foreground">
             <a href="#" className="hover:text-foreground transition-colors">
               <FaGithub className="h-4 w-4" />
@@ -116,7 +166,7 @@ export default function ProfilePage() {
             </a>
             <span className="flex items-center gap-1 text-xs">
               <MapPin className="h-3 w-3" />
-              Manila, PH
+              {MOCK_PROFILE.location}
             </span>
           </div>
         </div>
@@ -142,10 +192,7 @@ export default function ProfilePage() {
         <Card>
           <CardContent className="pt-5 pb-5 px-5">
             <p className="text-[15px] leading-relaxed">
-              I&apos;m a passionate CS student who loves distributed systems
-              and language design. Currently exploring compilers, low-level
-              networking, and building tools that make developers&apos; lives
-              easier.
+              {MOCK_PROFILE.about}
             </p>
           </CardContent>
         </Card>
