@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { X, Heart, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 
 // --- Types ---
 type InternshipCard = {
@@ -192,6 +194,32 @@ const TEAMMATES: TeammateCard[] = [
   },
 ]
 
+async function seedInternships() {
+  for (const internship of INTERNSHIPS) {
+    await setDoc(
+      doc(collection(db, "internships"), String(internship.id)),
+      {
+        ...internship,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+  }
+}
+
+async function seedTeammates() {
+  for (const teammate of TEAMMATES) {
+    await setDoc(
+      doc(collection(db, "teammates"), String(teammate.id)),
+      {
+        ...teammate,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+  }
+}
+
 // --- SwipeCard ---
 type SwipeCardHandle = { swipe: (dir: "left" | "right") => void }
 type SwipeCardProps = { card: AnyCard; stackIndex: number; onDone: (dir: "left" | "right") => void; onSwipeDir?: (dir: "left" | "right" | null) => void }
@@ -372,6 +400,9 @@ export default function MatchPage() {
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Match</h1>
           <p className="text-sm text-muted-foreground">Swipe to find your next opportunity or teammate.</p>
+          <div className="flex justify-center gap-2 pt-3">
+          
+          </div>
         </div>
 
         {/* Tabs */}

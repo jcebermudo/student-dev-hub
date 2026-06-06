@@ -1,3 +1,5 @@
+"use client"
+
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -7,6 +9,17 @@ import { Users, Search } from "lucide-react"
 import { FaGoogle, FaEthereum, FaMicrosoft, FaGithub, FaUnity } from "react-icons/fa"
 import { SiDevpost } from "react-icons/si"
 import type { IconType } from "react-icons"
+import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+
+const ICONS: Record<string, IconType> = {
+  google: FaGoogle,
+  ethereum: FaEthereum,
+  microsoft: FaMicrosoft,
+  github: FaGithub,
+  devpost: SiDevpost,
+  unity: FaUnity,
+}
 
 type Hackathon = {
   id: number
@@ -21,7 +34,7 @@ type Hackathon = {
   tags: string[]
   bannerFrom: string
   bannerTo: string
-  icon: IconType
+  icon: string
   bannerImage?: string
 }
 
@@ -39,7 +52,7 @@ const HACKATHONS: Hackathon[] = [
     tags: ["AI/ML", "Social Impact"],
     bannerFrom: "from-blue-600",
     bannerTo: "to-blue-400",
-    icon: FaGoogle,
+    icon: "google",
     bannerImage: "/images/google-vertex-ai.webp",
   },
   {
@@ -55,7 +68,7 @@ const HACKATHONS: Hackathon[] = [
     tags: ["Blockchain", "Web3"],
     bannerFrom: "from-violet-700",
     bannerTo: "to-purple-400",
-    icon: FaEthereum,
+    icon: "ethereum",
     bannerImage: "/images/eth-hp.jpg",
   },
   {
@@ -71,7 +84,7 @@ const HACKATHONS: Hackathon[] = [
     tags: ["Climate", "Sustainability"],
     bannerFrom: "from-emerald-600",
     bannerTo: "to-teal-400",
-    icon: FaMicrosoft,
+    icon: "microsoft",
     bannerImage: "/images/bt-hp.png",
   },
   {
@@ -87,7 +100,7 @@ const HACKATHONS: Hackathon[] = [
     tags: ["Open Source", "Dev Tools"],
     bannerFrom: "from-zinc-800",
     bannerTo: "to-zinc-600",
-    icon: FaGithub,
+    icon: "github",
     bannerImage: "/images/osf-hp.jpg",
   },
   {
@@ -103,7 +116,7 @@ const HACKATHONS: Hackathon[] = [
     tags: ["Healthcare", "Mobile"],
     bannerFrom: "from-rose-600",
     bannerTo: "to-pink-400",
-    icon: SiDevpost,
+    icon: "devpost",
     bannerImage: "/images/ht-hp.webp",
   },
   {
@@ -119,7 +132,7 @@ const HACKATHONS: Hackathon[] = [
     tags: ["Game Dev", "AR/VR"],
     bannerFrom: "from-orange-600",
     bannerTo: "to-amber-400",
-    icon: FaUnity,
+    icon: "unity",
     bannerImage: "/images/unity-hp.webp",
   },
 ]
@@ -128,6 +141,19 @@ const STATUS_STYLES: Record<Hackathon["status"], string> = {
   Open: "bg-emerald-100 text-emerald-700",
   Upcoming: "bg-blue-100 text-blue-700",
   Ended: "bg-muted text-muted-foreground",
+}
+
+async function seedHackathons() {
+  for (const hackathon of HACKATHONS) {
+    await setDoc(
+      doc(collection(db, "hackathons"), String(hackathon.id)),
+      {
+        ...hackathon,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    )
+  }
 }
 
 export default function HackathonsPage() {
@@ -139,6 +165,7 @@ export default function HackathonsPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Hackathons</h1>
           <p className="text-sm text-muted-foreground">Discover and join the best hackathons for student developers.</p>
+          
         </div>
 
         {/* Search */}
@@ -167,7 +194,10 @@ export default function HackathonsPage() {
 
         {/* Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {HACKATHONS.map((h) => (
+          {HACKATHONS.map((h) => {
+            const Icon = ICONS[h.icon]
+
+            return (
             <Card key={h.id} className="hover:shadow-md transition-shadow cursor-pointer flex flex-col overflow-hidden p-0">
 
               {/* Banner */}
@@ -177,7 +207,7 @@ export default function HackathonsPage() {
                 ) : (
                   <>
                     <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_20%_80%,white,transparent)]" />
-                    <h.icon className="h-10 w-10 text-white/90" />
+                    {Icon && <Icon className="h-10 w-10 text-white/90" />}
                     <span className="text-white/80 text-xs font-medium tracking-wide">{h.organizer}</span>
                   </>
                 )}
@@ -207,7 +237,8 @@ export default function HackathonsPage() {
               </CardFooter>
 
             </Card>
-          ))}
+            )
+          })}
         </div>
       </main>
     </div>
