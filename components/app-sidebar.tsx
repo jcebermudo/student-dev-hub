@@ -4,11 +4,14 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { HiTrophy, HiSparkles } from "react-icons/hi2"
+import { LogOut } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/contexts/auth-context"
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -28,6 +31,7 @@ const NAV_ITEMS = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { state } = useSidebar()
+  const { signOut } = useAuth()
   const collapsed = state === "collapsed"
 
   return (
@@ -69,6 +73,16 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="px-2 pb-6">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={signOut} tooltip="Log out">
+              <LogOut className="text-muted-foreground" />
+              <span>Log out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   )
 }
