@@ -22,7 +22,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-8 px-6">
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold tracking-tight">StudentDevHub</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Fuse</h1>
           <p className="text-sm text-muted-foreground">
             Sign in to access your hub
           </p>
