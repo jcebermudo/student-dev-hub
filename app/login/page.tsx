@@ -12,7 +12,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/profile");
+      // Check if user has role via auth context
+      // The auth context will handle redirection based on role
+      // For new users, they'll go to role selection
+      router.replace("/select-role");
     }
   }, [user, loading, router]);
 
