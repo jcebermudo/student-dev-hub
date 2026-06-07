@@ -4,7 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { HiTrophy, HiSparkles } from "react-icons/hi2"
-import { LogOut } from "lucide-react"
+import { BookmarkCheck, LogOut, MessageCircle, Sparkles } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -24,8 +24,11 @@ import {
 
 const NAV_ITEMS = [
   { title: "Match", href: "/jobs", icon: HiSparkles },
+  { title: "Saved", href: "/saved", icon: BookmarkCheck },
   { title: "Hackathons", href: "/hackathons", icon: HiTrophy },
+  { title: "Chat", href: "/chat", icon: MessageCircle },
   { title: "Profile", href: "/profile", avatar: true },
+  { title: "Premium", href: "/premium", icon: Sparkles },
 ]
 
 export function AppSidebar() {

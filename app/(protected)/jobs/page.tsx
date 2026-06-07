@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils"
 import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
+const SAVED_MATCHES_KEY = "student-dev-hub:saved-matches"
+
 // --- Types ---
 type InternshipCard = {
   type: "internship"
@@ -39,6 +41,53 @@ type TeammateCard = {
 }
 
 type AnyCard = InternshipCard | TeammateCard
+
+type SavedMatch = {
+  id: string
+  type: AnyCard["type"]
+  title: string
+  subtitle: string
+  meta: string
+  description: string
+  skills: string[]
+  savedAt: string
+  status: "waiting"
+}
+
+function toSavedMatch(card: AnyCard): SavedMatch {
+  if (card.type === "internship") {
+    return {
+      id: `${card.type}-${card.id}`,
+      type: card.type,
+      title: card.company,
+      subtitle: card.role,
+      meta: card.location,
+      description: card.description,
+      skills: card.skills,
+      savedAt: new Date().toISOString(),
+      status: "waiting",
+    }
+  }
+
+  return {
+    id: `${card.type}-${card.id}`,
+    type: card.type,
+    title: card.name,
+    subtitle: card.role,
+    meta: `${card.school} · ${card.looking}`,
+    description: card.bio,
+    skills: card.skills,
+    savedAt: new Date().toISOString(),
+    status: "waiting",
+  }
+}
+
+function saveRightSwipe(card: AnyCard) {
+  const nextMatch = toSavedMatch(card)
+  const savedMatches = JSON.parse(window.localStorage.getItem(SAVED_MATCHES_KEY) ?? "[]") as SavedMatch[]
+  const withoutDuplicate = savedMatches.filter((match) => match.id !== nextMatch.id)
+  window.localStorage.setItem(SAVED_MATCHES_KEY, JSON.stringify([nextMatch, ...withoutDuplicate]))
+}
 
 // --- Data ---
 const INTERNSHIPS: InternshipCard[] = [
@@ -376,15 +425,26 @@ export default function MatchPage() {
   const [internshipIndex, setInternshipIndex] = useState(0)
   const [teammateIndex, setTeammateIndex] = useState(0)
   const [swipeDir, setSwipeDir] = useState<"left" | "right" | null>(null)
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
   const topCardRef = useRef<SwipeCardHandle>(null)
 
   const data = tab === "internships" ? INTERNSHIPS : TEAMMATES
   const currentIndex = tab === "internships" ? internshipIndex : teammateIndex
 
-  const handleDone = () => {
+  const handleDone = (dir: "left" | "right") => {
+    const swipedCard = data[currentIndex]
+
+    if (dir === "right" && swipedCard) {
+      saveRightSwipe(swipedCard)
+      setSaveNotice(`${swipedCard.type === "internship" ? swipedCard.company : swipedCard.name} saved. Waiting for a match.`)
+    }
+
     if (tab === "internships") setInternshipIndex((i) => i + 1)
     else setTeammateIndex((i) => i + 1)
-    setTimeout(() => setSwipeDir(null), 100)
+    setTimeout(() => {
+      setSwipeDir(null)
+      setSaveNotice(null)
+    }, 1800)
   }
 
   const triggerSwipe = (dir: "left" | "right") => {
@@ -400,6 +460,7 @@ export default function MatchPage() {
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Match</h1>
           <p className="text-sm text-muted-foreground">Swipe to find your next opportunity or teammate.</p>
+          {saveNotice && <p className="text-xs font-medium text-emerald-600">{saveNotice}</p>}
           <div className="flex justify-center gap-2 pt-3">
           
           </div>
