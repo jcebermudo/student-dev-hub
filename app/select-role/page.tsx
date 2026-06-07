@@ -44,7 +44,7 @@ export default function SelectRolePage() {
               <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4 group-hover:bg-emerald-200 transition-colors">
                 <GraduationCap className="h-8 w-8 text-emerald-600" />
               </div>
-              <CardTitle className="text-xl">I'm a Student / Talent</CardTitle>
+              <CardTitle className="text-xl">I&apos;m a Student / Talent</CardTitle>
               <CardDescription>
                 Find internships, hackathons, and teammates
               </CardDescription>
@@ -73,7 +73,7 @@ export default function SelectRolePage() {
               <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
                 <Building2 className="h-8 w-8 text-blue-600" />
               </div>
-              <CardTitle className="text-xl">I'm an Employer</CardTitle>
+              <CardTitle className="text-xl">I&apos;m an Employer</CardTitle>
               <CardDescription>
                 Hire talent, host hackathons, and find candidates
               </CardDescription>
