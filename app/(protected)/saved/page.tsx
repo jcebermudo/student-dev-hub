@@ -1,11 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BookmarkCheck, Clock, MessageCircle } from "lucide-react"
+import { collection, deleteDoc, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore"
+import { useAuth } from "@/contexts/auth-context"
+import { db } from "@/lib/firebase"
 
 const SAVED_MATCHES_KEY = "student-dev-hub:saved-matches"
 
@@ -19,21 +22,8 @@ type SavedMatch = {
   skills: string[]
   savedAt: string
   status: "waiting"
+  sourceId?: number
 }
-
-const SAMPLE_WAITING: SavedMatch[] = [
-  {
-    id: "sample-hackathon-team",
-    type: "teammate",
-    title: "Ana Cruz",
-    subtitle: "ML Engineer",
-    meta: "ADMU - Research partner",
-    description: "Waiting for Ana to confirm if she wants to team up for a social-good AI project.",
-    skills: ["Python", "PyTorch", "Data Viz"],
-    savedAt: new Date().toISOString(),
-    status: "waiting",
-  },
-]
 
 function formatSavedDate(value: string) {
   const date = new Date(value)
@@ -57,17 +47,54 @@ function getStoredMatches() {
 }
 
 export default function SavedPage() {
+  const { user } = useAuth()
   const [savedMatches, setSavedMatches] = useState<SavedMatch[]>(getStoredMatches)
 
   const matches = useMemo(() => {
-    const ids = new Set(savedMatches.map((match) => match.id))
-    return [...savedMatches, ...SAMPLE_WAITING.filter((match) => !ids.has(match.id))]
+    return [...savedMatches].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
   }, [savedMatches])
 
-  function removeMatch(id: string) {
+  useEffect(() => {
+    if (!user) return
+
+    const currentUser = user
+
+    async function loadSavedMatches() {
+      const snapshot = await getDocs(collection(db, "users", currentUser.uid, "savedMatches"))
+      const firestoreMatches = snapshot.docs.map((savedDoc) => savedDoc.data() as SavedMatch)
+      const firestoreIds = new Set(firestoreMatches.map((match) => match.id))
+      const localOnlyMatches = getStoredMatches().filter((match) => !firestoreIds.has(match.id))
+      const mergedMatches = [...firestoreMatches, ...localOnlyMatches]
+
+      await Promise.all(
+        localOnlyMatches.map((match) =>
+          setDoc(
+            doc(db, "users", currentUser.uid, "savedMatches", match.id),
+            {
+              ...match,
+              savedAtTimestamp: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          )
+        )
+      )
+
+      setSavedMatches(mergedMatches)
+      window.localStorage.setItem(SAVED_MATCHES_KEY, JSON.stringify(mergedMatches))
+    }
+
+    void loadSavedMatches()
+  }, [user])
+
+  async function removeMatch(id: string) {
     const nextMatches = savedMatches.filter((match) => match.id !== id)
     setSavedMatches(nextMatches)
     window.localStorage.setItem(SAVED_MATCHES_KEY, JSON.stringify(nextMatches))
+
+    if (user) {
+      await deleteDoc(doc(db, "users", user.uid, "savedMatches", id))
+    }
   }
 
   return (
@@ -156,7 +183,7 @@ export default function SavedPage() {
                         <Link href="/chat">Message</Link>
                       </Button>
                       {savedMatches.some((savedMatch) => savedMatch.id === match.id) && (
-                        <Button type="button" size="sm" variant="ghost" onClick={() => removeMatch(match.id)}>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => void removeMatch(match.id)}>
                           Remove
                         </Button>
                       )}

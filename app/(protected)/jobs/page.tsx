@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { X, Heart, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore"
+import { doc, serverTimestamp, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+import { useAuth } from "@/contexts/auth-context"
 
 const SAVED_MATCHES_KEY = "student-dev-hub:saved-matches"
 
@@ -52,6 +53,7 @@ type SavedMatch = {
   skills: string[]
   savedAt: string
   status: "waiting"
+  sourceId: number
 }
 
 function toSavedMatch(card: AnyCard): SavedMatch {
@@ -66,6 +68,7 @@ function toSavedMatch(card: AnyCard): SavedMatch {
       skills: card.skills,
       savedAt: new Date().toISOString(),
       status: "waiting",
+      sourceId: card.id,
     }
   }
 
@@ -79,14 +82,25 @@ function toSavedMatch(card: AnyCard): SavedMatch {
     skills: card.skills,
     savedAt: new Date().toISOString(),
     status: "waiting",
+    sourceId: card.id,
   }
 }
 
-function saveRightSwipe(card: AnyCard) {
+async function saveRightSwipe(card: AnyCard, userId: string) {
   const nextMatch = toSavedMatch(card)
   const savedMatches = JSON.parse(window.localStorage.getItem(SAVED_MATCHES_KEY) ?? "[]") as SavedMatch[]
   const withoutDuplicate = savedMatches.filter((match) => match.id !== nextMatch.id)
   window.localStorage.setItem(SAVED_MATCHES_KEY, JSON.stringify([nextMatch, ...withoutDuplicate]))
+
+  await setDoc(
+    doc(db, "users", userId, "savedMatches", nextMatch.id),
+    {
+      ...nextMatch,
+      savedAtTimestamp: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  )
 }
 
 // --- Data ---
@@ -243,32 +257,6 @@ const TEAMMATES: TeammateCard[] = [
   },
 ]
 
-async function seedInternships() {
-  for (const internship of INTERNSHIPS) {
-    await setDoc(
-      doc(collection(db, "internships"), String(internship.id)),
-      {
-        ...internship,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    )
-  }
-}
-
-async function seedTeammates() {
-  for (const teammate of TEAMMATES) {
-    await setDoc(
-      doc(collection(db, "teammates"), String(teammate.id)),
-      {
-        ...teammate,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    )
-  }
-}
-
 // --- SwipeCard ---
 type SwipeCardHandle = { swipe: (dir: "left" | "right") => void }
 type SwipeCardProps = { card: AnyCard; stackIndex: number; onDone: (dir: "left" | "right") => void; onSwipeDir?: (dir: "left" | "right" | null) => void }
@@ -421,6 +409,7 @@ SwipeCard.displayName = "SwipeCard"
 
 // --- Page ---
 export default function MatchPage() {
+  const { user } = useAuth()
   const [tab, setTab] = useState<"internships" | "teammates">("internships")
   const [internshipIndex, setInternshipIndex] = useState(0)
   const [teammateIndex, setTeammateIndex] = useState(0)
@@ -435,7 +424,11 @@ export default function MatchPage() {
     const swipedCard = data[currentIndex]
 
     if (dir === "right" && swipedCard) {
-      saveRightSwipe(swipedCard)
+      if (user) {
+        void saveRightSwipe(swipedCard, user.uid).catch(() => {
+          setSaveNotice("Saved on this device. Database sync failed.")
+        })
+      }
       setSaveNotice(`${swipedCard.type === "internship" ? swipedCard.company : swipedCard.name} saved. Waiting for a match.`)
     }
 
