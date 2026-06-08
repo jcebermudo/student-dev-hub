@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,9 @@ import { CalendarDays, MapPin, Search, Trophy, Users, X } from "lucide-react"
 import { FaEthereum, FaGithub, FaGoogle, FaMicrosoft, FaUnity } from "react-icons/fa"
 import { SiDevpost } from "react-icons/si"
 import type { IconType } from "react-icons"
+import { collection, onSnapshot } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { mergeHackathons, normalizeHackathon, STATUS_STYLES, type Hackathon } from "@/lib/hackathons"
 
 const ICONS: Record<string, IconType> = {
   google: FaGoogle,
@@ -21,128 +24,6 @@ const ICONS: Record<string, IconType> = {
   unity: FaUnity,
 }
 
-type Hackathon = {
-  id: number
-  title: string
-  organizer: string
-  description: string
-  status: "Open" | "Upcoming" | "Ended"
-  location: "Online" | "In-person"
-  timeLeft: string
-  prize: string
-  participants: number
-  tags: string[]
-  bannerFrom: string
-  bannerTo: string
-  icon: string
-  bannerImage?: string
-}
-
-const HACKATHONS: Hackathon[] = [
-  {
-    id: 1,
-    title: "Google Vertex AI Hackathon",
-    organizer: "Google",
-    description: "Build AI-powered solutions that drive positive social impact.",
-    status: "Open",
-    location: "Online",
-    timeLeft: "1 month to go",
-    prize: "PHP 50,000",
-    participants: 8002,
-    tags: ["AI/ML", "Social Impact"],
-    bannerFrom: "from-blue-600",
-    bannerTo: "to-blue-400",
-    icon: "google",
-    bannerImage: "/images/google-vertex-ai.webp",
-  },
-  {
-    id: 2,
-    title: "Web3 Builders Sprint",
-    organizer: "Ethereum Foundation",
-    description: "Create the next generation of decentralized applications.",
-    status: "Open",
-    location: "Online",
-    timeLeft: "3 weeks to go",
-    prize: "PHP 30,000",
-    participants: 3201,
-    tags: ["Blockchain", "Web3"],
-    bannerFrom: "from-violet-700",
-    bannerTo: "to-purple-400",
-    icon: "ethereum",
-    bannerImage: "/images/eth-hp.jpg",
-  },
-  {
-    id: 3,
-    title: "Beyond Tomorrow Summit",
-    organizer: "Microsoft",
-    description: "Build intelligent solutions. Solve real-world problems. Create impact that goes Beyond Tomorrow.",
-    status: "Open",
-    location: "In-person",
-    timeLeft: "2 months to go",
-    prize: "PHP 80,000",
-    participants: 1540,
-    tags: ["Climate", "Sustainability"],
-    bannerFrom: "from-emerald-600",
-    bannerTo: "to-teal-400",
-    icon: "microsoft",
-    bannerImage: "/images/bt-hp.png",
-  },
-  {
-    id: 4,
-    title: "Open Source Fest",
-    organizer: "GitHub",
-    description: "Contribute to open source and win prizes for your impact.",
-    status: "Open",
-    location: "Online",
-    timeLeft: "5 weeks to go",
-    prize: "PHP 15,000",
-    participants: 5870,
-    tags: ["Open Source", "Dev Tools"],
-    bannerFrom: "from-zinc-800",
-    bannerTo: "to-zinc-600",
-    icon: "github",
-    bannerImage: "/images/osf-hp.jpg",
-  },
-  {
-    id: 5,
-    title: "HealthTech Hackathon",
-    organizer: "Devpost",
-    description: "Design digital health tools that improve patient outcomes.",
-    status: "Open",
-    location: "In-person",
-    timeLeft: "3 months to go",
-    prize: "PHP 25,000",
-    participants: 920,
-    tags: ["Healthcare", "Mobile"],
-    bannerFrom: "from-rose-600",
-    bannerTo: "to-pink-400",
-    icon: "devpost",
-    bannerImage: "/images/ht-hp.webp",
-  },
-  {
-    id: 6,
-    title: "Global Game Jam",
-    organizer: "Unity",
-    description: "Build a playable game in 30 days using any Unity tools.",
-    status: "Open",
-    location: "Online",
-    timeLeft: "3 weeks to go",
-    prize: "PHP 20,000",
-    participants: 11230,
-    tags: ["Game Dev", "AR/VR"],
-    bannerFrom: "from-orange-600",
-    bannerTo: "to-amber-400",
-    icon: "unity",
-    bannerImage: "/images/unity-hp.webp",
-  },
-]
-
-const STATUS_STYLES: Record<Hackathon["status"], string> = {
-  Open: "bg-emerald-100 text-emerald-700",
-  Upcoming: "bg-blue-100 text-blue-700",
-  Ended: "bg-muted text-muted-foreground",
-}
-
 const FILTERS = ["All", "Open", "Upcoming", "Ended", "Online", "In-person"] as const
 type HackathonFilter = (typeof FILTERS)[number]
 
@@ -150,11 +31,21 @@ export default function HackathonsPage() {
   const [selectedHackathon, setSelectedHackathon] = useState<Hackathon | null>(null)
   const [activeFilter, setActiveFilter] = useState<HackathonFilter>("All")
   const [searchQuery, setSearchQuery] = useState("")
+  const [databaseHackathons, setDatabaseHackathons] = useState<Hackathon[]>([])
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "hackathons"), (snapshot) => {
+      setDatabaseHackathons(
+        snapshot.docs.map((doc) => normalizeHackathon(doc.id, doc.data()))
+      )
+    })
+  }, [])
 
   const filteredHackathons = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
+    const hackathons = mergeHackathons(databaseHackathons)
 
-    return HACKATHONS.filter((hackathon) => {
+    return hackathons.filter((hackathon) => {
       const matchesFilter =
         activeFilter === "All" ||
         hackathon.status === activeFilter ||
@@ -173,7 +64,7 @@ export default function HackathonsPage() {
 
       return matchesFilter && (!query || searchableText.includes(query))
     })
-  }, [activeFilter, searchQuery])
+  }, [activeFilter, databaseHackathons, searchQuery])
 
   return (
     <div className="min-h-screen bg-background">
