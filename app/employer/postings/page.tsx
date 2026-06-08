@@ -1,12 +1,12 @@
 "use client";
-import { Briefcase } from "lucide-react";  // Add to existing lucide-react imports
-import { useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { Briefcase, Eye, Loader2, Plus, Star, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -16,13 +16,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -31,468 +28,349 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/contexts/auth-context";
+import { db } from "@/lib/firebase";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, EyeOff, Copy, CalendarDays, Users, Star } from "lucide-react";
+  POSTING_STATUS_CONFIG,
+  MOCK_POSTINGS,
+  mergePostings,
+  normalizePosting,
+  type Posting,
+  type PostingStatus,
+  type PostingType,
+} from "@/lib/postings";
 
-// Types
-type PostingType = "internship" | "job";
-type PostingStatus = "active" | "draft" | "closed";
-
-type Posting = {
-  id: string;
+type PostingDraft = {
   title: string;
+  company: string;
   type: PostingType;
   location: string;
   isRemote: boolean;
   description: string;
-  requirements: string[];
-  preferredSkills: string[];
-  minCredibilityScore?: number;
-  applicants: number;
-  status: PostingStatus;
-  postedAt: string;
-  deadline?: string;
+  requirements: string;
+  preferredSkills: string;
+  minCredibilityScore: string;
+  deadline: string;
 };
 
-// Mock data
-const MOCK_POSTINGS: Posting[] = [
-  {
-    id: "1",
-    title: "Backend Engineering Intern",
-    type: "internship",
-    location: "Makati, PH",
-    isRemote: false,
-    description: "Work on core ride-matching algorithms serving millions of daily users across Southeast Asia.",
-    requirements: ["Strong knowledge of Go or Python", "Understanding of distributed systems", "Experience with REST APIs"],
-    preferredSkills: ["Kubernetes", "gRPC", "PostgreSQL"],
-    minCredibilityScore: 70,
-    applicants: 214,
-    status: "active",
-    postedAt: "2025-05-15",
-    deadline: "2025-07-15",
-  },
-  {
-    id: "2",
-    title: "Frontend Developer",
-    type: "job",
-    location: "Manila, PH",
-    isRemote: true,
-    description: "Build high-performance e-commerce UIs used by 200M+ shoppers in the region.",
-    requirements: ["3+ years React experience", "TypeScript proficiency", "State management (Redux/Zustand)"],
-    preferredSkills: ["Next.js", "Tailwind CSS", "GraphQL"],
-    minCredibilityScore: 75,
-    applicants: 183,
-    status: "active",
-    postedAt: "2025-05-20",
-    deadline: "2025-06-30",
-  },
-  {
-    id: "3",
-    title: "Full Stack Developer",
-    type: "job",
-    location: "BGC, Taguig",
-    isRemote: false,
-    description: "Develop enterprise solutions for Fortune 500 clients across Southeast Asia.",
-    requirements: ["Node.js and React expertise", "AWS experience", "Database design skills"],
-    preferredSkills: ["Terraform", "Docker", "CI/CD pipelines"],
-    minCredibilityScore: 80,
-    applicants: 156,
-    status: "active",
-    postedAt: "2025-05-10",
-    deadline: "2025-06-25",
-  },
-  {
-    id: "4",
-    title: "AI/ML Intern",
-    type: "internship",
-    location: "Pasig, PH",
-    isRemote: true,
-    description: "Research and deploy ML models for fraud detection and credit scoring at scale.",
-    requirements: ["Python and TensorFlow/PyTorch", "ML fundamentals", "Data analysis skills"],
-    preferredSkills: ["MLOps", "SQL", "Data visualization"],
-    minCredibilityScore: 85,
-    applicants: 121,
-    status: "draft",
-    postedAt: "2025-05-25",
-    deadline: "2025-08-01",
-  },
-  {
-    id: "5",
-    title: "Cloud Engineering Intern",
-    type: "internship",
-    location: "Mandaluyong, PH",
-    isRemote: false,
-    description: "Manage cloud infrastructure for a network serving 80M+ subscribers nationwide.",
-    requirements: ["AWS or GCP basics", "Linux fundamentals", "Networking concepts"],
-    preferredSkills: ["Docker", "Kubernetes", "Terraform"],
-    minCredibilityScore: 65,
-    applicants: 98,
-    status: "closed",
-    postedAt: "2025-03-01",
-    deadline: "2025-05-01",
-  },
-];
-
-const STATUS_CONFIG: Record<PostingStatus, { label: string; className: string }> = {
-  active: { label: "Active", className: "bg-emerald-100 text-emerald-700" },
-  draft: { label: "Draft", className: "bg-amber-100 text-amber-700" },
-  closed: { label: "Closed", className: "bg-gray-100 text-gray-700" },
+const EMPTY_DRAFT: PostingDraft = {
+  title: "",
+  company: "",
+  type: "internship",
+  location: "",
+  isRemote: false,
+  description: "",
+  requirements: "",
+  preferredSkills: "",
+  minCredibilityScore: "",
+  deadline: "",
 };
 
-// Create Posting Dialog Component
-function CreatePostingDialog({ onPostingCreated }: { onPostingCreated: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    type: "internship" as PostingType,
-    location: "",
-    isRemote: false,
-    description: "",
-    requirements: "",
-    preferredSkills: "",
-    minCredibilityScore: 0,
-    deadline: "",
-  });
+type PostingFilter = "all" | "active" | "draft" | "closed";
 
-  const handleSubmit = () => {
-    // TODO: Save to Firestore
-    console.log("Create posting:", formData);
-    setOpen(false);
-    onPostingCreated();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Posting
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create New Posting</DialogTitle>
-          <DialogDescription>
-            Fill in the details below to create a new job or internship posting.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Posting Title</Label>
-              <Input
-                placeholder="e.g., Backend Engineering Intern"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(v) => setFormData({ ...formData, type: v as PostingType })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="internship">Internship</SelectItem>
-                  <SelectItem value="job">Full-time Job</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <Input
-                placeholder="e.g., Makati, PH"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              />
-            </div>
-            <div className="flex items-center justify-between space-y-0 pt-6">
-              <Label>Remote Position</Label>
-              <Switch
-                checked={formData.isRemote}
-                onCheckedChange={(v) => setFormData({ ...formData, isRemote: v })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea
-              placeholder="Describe the role, responsibilities, and what makes this opportunity exciting..."
-              rows={4}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Requirements (comma-separated)</Label>
-            <Input
-              placeholder="e.g., Python, REST APIs, Git"
-              value={formData.requirements}
-              onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Preferred Skills (comma-separated)</Label>
-            <Input
-              placeholder="e.g., Docker, Kubernetes, AWS"
-              value={formData.preferredSkills}
-              onChange={(e) => setFormData({ ...formData, preferredSkills: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Minimum Credibility Score</Label>
-              <Input
-                type="number"
-                placeholder="0-100"
-                value={formData.minCredibilityScore || ""}
-                onChange={(e) => setFormData({ ...formData, minCredibilityScore: parseInt(e.target.value) || 0 })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Application Deadline</Label>
-              <Input
-                type="date"
-                value={formData.deadline}
-                onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-              />
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleSubmit}>Create Posting</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Edit Posting Dialog
-function EditPostingDialog({ posting, onSave }: { posting: Posting; onSave: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState(posting);
-
-  const handleSave = () => {
-    console.log("Save posting:", formData);
-    setOpen(false);
-    onSave();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <Edit className="h-4 w-4 mr-2" />
-          Edit
-        </DropdownMenuItem>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Posting</DialogTitle>
-          <DialogDescription>Update the details of this posting.</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Posting Title</Label>
-              <Input
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(v) => setFormData({ ...formData, type: v as PostingType })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="internship">Internship</SelectItem>
-                  <SelectItem value="job">Full-time Job</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <Input
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              />
-            </div>
-            <div className="flex items-center justify-between space-y-0 pt-6">
-              <Label>Remote Position</Label>
-              <Switch
-                checked={formData.isRemote}
-                onCheckedChange={(v) => setFormData({ ...formData, isRemote: v })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea
-              rows={4}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(v) => setFormData({ ...formData, status: v as PostingStatus })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave}>Save Changes</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Main Page Component
 export default function PostingsPage() {
-  const [postings, setPostings] = useState<Posting[]>(MOCK_POSTINGS);
-  const [activeTab, setActiveTab] = useState<"all" | "active" | "draft" | "closed">("all");
+  const { user } = useAuth();
+  const [databasePostings, setDatabasePostings] = useState<Posting[]>([]);
+  const [activeTab, setActiveTab] = useState<PostingFilter>("all");
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<PostingDraft>(EMPTY_DRAFT);
+  const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [listenerError, setListenerError] = useState("");
 
-  const filteredPostings = postings.filter((p) => {
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "postings"),
+      (snapshot) => {
+        setListenerError("");
+        setDatabasePostings(snapshot.docs.map((doc) => normalizePosting(doc.id, doc.data())));
+      },
+      () => {
+        setListenerError(
+          "Firestore permissions are blocking live postings. Showing mock postings for now."
+        );
+      }
+    );
+  }, []);
+
+  const postings = useMemo(() => mergePostings(databasePostings), [databasePostings]);
+  const filteredPostings = postings.filter((posting) => {
     if (activeTab === "all") return true;
-    return p.status === activeTab;
+    return posting.status === activeTab;
   });
 
-  const handleDelete = (id: string) => {
-    setPostings(postings.filter((p) => p.id !== id));
-  };
-
-  const handleToggleStatus = (id: string) => {
-    setPostings(
-      postings.map((p) =>
-        p.id === id
-          ? { ...p, status: p.status === "active" ? "closed" : "active" }
-          : p
+  const activeCount = postings.filter((posting) => posting.status === "active").length;
+  const applicantCount = postings.reduce((sum, posting) => sum + posting.applicants, 0);
+  const avgCredibility = postings.length
+    ? Math.round(
+        postings.reduce((sum, posting) => sum + (posting.minCredibilityScore ?? 0), 0) /
+          postings.length
       )
-    );
-  };
+    : 0;
 
-  const handleDuplicate = (posting: Posting) => {
-    const newPosting = {
-      ...posting,
-      id: Date.now().toString(),
-      title: `${posting.title} (Copy)`,
-      status: "draft" as PostingStatus,
-      postedAt: new Date().toISOString().split("T")[0],
-      applicants: 0,
-    };
-    setPostings([newPosting, ...postings]);
-  };
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    setError("");
+
+    if (nextOpen) {
+      setDraft((current) => ({
+        ...current,
+        company: current.company || user?.displayName || "",
+      }));
+    } else {
+      setDraft({ ...EMPTY_DRAFT, company: user?.displayName || "" });
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    if (!draft.title.trim() || !draft.company.trim()) {
+      setError("Title and company are required.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await addDoc(collection(db, "postings"), {
+        title: draft.title.trim(),
+        company: draft.company.trim(),
+        type: draft.type,
+        location: draft.isRemote ? "Remote" : draft.location.trim() || "TBD",
+        isRemote: draft.isRemote,
+        description: draft.description.trim() || "Role details will be shared soon.",
+        requirements: splitList(draft.requirements),
+        preferredSkills: splitList(draft.preferredSkills),
+        minCredibilityScore: Number(draft.minCredibilityScore) || 0,
+        applicants: 0,
+        status: "active" satisfies PostingStatus,
+        postedAt: new Date().toISOString().slice(0, 10),
+        deadline: draft.deadline || null,
+        createdBy: user?.uid ?? null,
+        createdByName: user?.displayName ?? null,
+        createdAt: serverTimestamp(),
+      });
+
+      setDraft({ ...EMPTY_DRAFT, company: user?.displayName || "" });
+      setOpen(false);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not create posting.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSeedMockPostings() {
+    if (!user) {
+      setError("Sign in first to save mock postings.");
+      return;
+    }
+
+    setSeeding(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await Promise.all(
+        MOCK_POSTINGS.map((posting) =>
+          setDoc(
+            doc(db, "postings", `mock-${user.uid}-${posting.id}`),
+            {
+              ...posting,
+              createdBy: user.uid,
+              createdByName: user.displayName ?? "Mock data",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          )
+        )
+      );
+      setNotice("Saved 6 mock postings to Firestore.");
+    } catch {
+      setError("Could not save mock postings. Make sure this account has the employer role in Firestore rules.");
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
+    <div className="space-y-6 p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Postings</h1>
           <p className="text-muted-foreground">Manage your job and internship postings.</p>
         </div>
-        <CreatePostingDialog onPostingCreated={() => {}} />
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+         
+          <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4" />
+                Create Posting
+              </Button>
+            </DialogTrigger>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create posting</DialogTitle>
+              <DialogDescription>
+                Saved postings appear in the student match queue as jobs or internships.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Title">
+                  <Input
+                    value={draft.title}
+                    onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                    placeholder="Frontend Developer"
+                    required
+                  />
+                </Field>
+                <Field label="Company">
+                  <Input
+                    value={draft.company}
+                    onChange={(event) => setDraft({ ...draft, company: event.target.value })}
+                    placeholder="Company name"
+                    required
+                  />
+                </Field>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Type">
+                  <select
+                    className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    value={draft.type}
+                    onChange={(event) =>
+                      setDraft({ ...draft, type: event.target.value as PostingType })
+                    }
+                  >
+                    <option value="internship">Internship</option>
+                    <option value="job">Job</option>
+                  </select>
+                </Field>
+                <Field label="Location">
+                  <Input
+                    value={draft.location}
+                    disabled={draft.isRemote}
+                    onChange={(event) => setDraft({ ...draft, location: event.target.value })}
+                    placeholder="Makati, PH"
+                  />
+                </Field>
+                <Field label="Deadline">
+                  <Input
+                    type="date"
+                    value={draft.deadline}
+                    onChange={(event) => setDraft({ ...draft, deadline: event.target.value })}
+                  />
+                </Field>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={draft.isRemote}
+                  onChange={(event) => setDraft({ ...draft, isRemote: event.target.checked })}
+                />
+                Remote position
+              </label>
+
+              <Field label="Description">
+                <Textarea
+                  value={draft.description}
+                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                  placeholder="Describe the role, responsibilities, and team."
+                  rows={4}
+                />
+              </Field>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Requirements">
+                  <Input
+                    value={draft.requirements}
+                    onChange={(event) => setDraft({ ...draft, requirements: event.target.value })}
+                    placeholder="React, TypeScript"
+                  />
+                </Field>
+                <Field label="Preferred skills">
+                  <Input
+                    value={draft.preferredSkills}
+                    onChange={(event) =>
+                      setDraft({ ...draft, preferredSkills: event.target.value })
+                    }
+                    placeholder="Next.js, Firebase"
+                  />
+                </Field>
+                <Field label="Min. score">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={draft.minCredibilityScore}
+                    onChange={(event) =>
+                      setDraft({ ...draft, minCredibilityScore: event.target.value })
+                    }
+                    placeholder="75"
+                  />
+                </Field>
+              </div>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save Posting
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {error && (
+        <div className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {notice}
+        </div>
+      )}
+
+      {listenerError && (
+        <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {listenerError}
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Postings</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{postings.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active</CardTitle>
-            <Eye className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{postings.filter((p) => p.status === "active").length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Applicants</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {postings.reduce((sum, p) => sum + p.applicants, 0).toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Avg. Credibility</CardTitle>
-            <Star className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {Math.round(postings.reduce((sum, p) => sum + (p.minCredibilityScore || 0), 0) / postings.length)}%
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard title="Total Postings" value={postings.length} icon={<Briefcase className="h-4 w-4" />} />
+        <StatCard title="Active" value={activeCount} icon={<Eye className="h-4 w-4 text-emerald-500" />} />
+        <StatCard title="Total Applicants" value={applicantCount.toLocaleString()} icon={<Users className="h-4 w-4" />} />
+        <StatCard title="Avg. Credibility" value={`${avgCredibility}%`} icon={<Star className="h-4 w-4 text-amber-500" />} />
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="all" value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="active">Active</TabsTrigger>
           <TabsTrigger value="draft">Drafts</TabsTrigger>
           <TabsTrigger value="closed">Closed</TabsTrigger>
         </TabsList>
-
         <TabsContent value={activeTab} className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -506,78 +384,30 @@ export default function PostingsPage() {
                     <TableHead>Min. Score</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Deadline</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPostings.map((posting) => (
                     <TableRow key={posting.id}>
-                      <TableCell className="font-medium">{posting.title}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">
-                          {posting.type === "internship" ? "Internship" : "Job"}
-                        </Badge>
+                        <div className="font-medium">{posting.title}</div>
+                        <div className="text-xs text-muted-foreground">{posting.company}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{posting.type === "internship" ? "Internship" : "Job"}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {posting.isRemote ? "Remote" : posting.location}
                       </TableCell>
                       <TableCell>{posting.applicants}</TableCell>
+                      <TableCell>{posting.minCredibilityScore ?? 0}%</TableCell>
                       <TableCell>
-                        {posting.minCredibilityScore ? (
-                          <div className="flex items-center gap-1">
-                            <Star className="h-3 w-3 text-amber-500" />
-                            <span>{posting.minCredibilityScore}%</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={STATUS_CONFIG[posting.status].className}>
-                          {STATUS_CONFIG[posting.status].label}
+                        <Badge className={POSTING_STATUS_CONFIG[posting.status].className}>
+                          {POSTING_STATUS_CONFIG[posting.status].label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {posting.deadline ? new Date(posting.deadline).toLocaleDateString() : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <EditPostingDialog posting={posting} onSave={() => {}} />
-                            <DropdownMenuItem onClick={() => handleToggleStatus(posting.id)}>
-                              {posting.status === "active" ? (
-                                <>
-                                  <EyeOff className="h-4 w-4 mr-2" />
-                                  Close
-                                </>
-                              ) : (
-                                <>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  Activate
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDuplicate(posting)}>
-                              <Copy className="h-4 w-4 mr-2" />
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => handleDelete(posting.id)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <TableCell className="text-muted-foreground">
+                        {posting.deadline ? new Date(posting.deadline).toLocaleDateString() : "TBD"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -589,4 +419,34 @@ export default function PostingsPage() {
       </Tabs>
     </div>
   );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon }: { title: string; value: string | number; icon: ReactNode }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <span className="text-muted-foreground">{icon}</span>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function splitList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

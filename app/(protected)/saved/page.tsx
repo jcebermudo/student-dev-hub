@@ -14,7 +14,7 @@ const SAVED_MATCHES_KEY = "student-dev-hub:saved-matches"
 
 type SavedMatch = {
   id: string
-  type: "internship" | "teammate"
+  type: "internship" | "opportunity" | "teammate"
   title: string
   subtitle: string
   meta: string
@@ -22,7 +22,7 @@ type SavedMatch = {
   skills: string[]
   savedAt: string
   status: "waiting"
-  sourceId?: number
+  sourceId?: string | number
 }
 
 function formatSavedDate(value: string) {
@@ -122,7 +122,7 @@ export default function SavedPage() {
               <BookmarkCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{matches.filter((match) => match.type === "internship").length}</div>
+              <div className="text-2xl font-bold">{matches.filter((match) => match.type === "internship" || match.type === "opportunity").length}</div>
               <p className="text-xs text-muted-foreground">saved opportunities</p>
             </CardContent>
           </Card>
@@ -172,8 +172,8 @@ export default function SavedPage() {
                       <p className="text-xs text-muted-foreground">{formatSavedDate(match.savedAt)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {match.skills.map((skill) => (
-                        <Badge key={skill} variant="secondary">
+                      {[...new Set(match.skills)].map((skill, index) => (
+                        <Badge key={`${match.id}-${skill}-${index}`} variant="secondary">
                           {skill}
                         </Badge>
                       ))}

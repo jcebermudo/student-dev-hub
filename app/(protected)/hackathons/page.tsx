@@ -32,13 +32,21 @@ export default function HackathonsPage() {
   const [activeFilter, setActiveFilter] = useState<HackathonFilter>("All")
   const [searchQuery, setSearchQuery] = useState("")
   const [databaseHackathons, setDatabaseHackathons] = useState<Hackathon[]>([])
+  const [listenerError, setListenerError] = useState("")
 
   useEffect(() => {
-    return onSnapshot(collection(db, "hackathons"), (snapshot) => {
-      setDatabaseHackathons(
-        snapshot.docs.map((doc) => normalizeHackathon(doc.id, doc.data()))
-      )
-    })
+    return onSnapshot(
+      collection(db, "hackathons"),
+      (snapshot) => {
+        setListenerError("")
+        setDatabaseHackathons(
+          snapshot.docs.map((doc) => normalizeHackathon(doc.id, doc.data()))
+        )
+      },
+      () => {
+        setListenerError("Live hackathons are unavailable. Showing mock hackathons for now.")
+      }
+    )
   }, [])
 
   const filteredHackathons = useMemo(() => {
@@ -72,6 +80,7 @@ export default function HackathonsPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Hackathons</h1>
           <p className="text-sm text-muted-foreground">Discover and join the best hackathons for student developers.</p>
+          {listenerError && <p className="text-xs font-medium text-amber-700">{listenerError}</p>}
         </div>
 
         <div className="relative">

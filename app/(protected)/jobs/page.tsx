@@ -1,22 +1,29 @@
 "use client"
 
-import { useState, forwardRef, useImperativeHandle, useRef, useEffect } from "react"
+import { useState, forwardRef, useImperativeHandle, useRef, useEffect, useMemo } from "react"
 import { motion, useMotionValue, useTransform, useMotionValueEvent, animate } from "motion/react"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { X, Heart, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { doc, serverTimestamp, setDoc } from "firebase/firestore"
+import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useAuth } from "@/contexts/auth-context"
+import { mergePostings, normalizePosting, type Posting } from "@/lib/postings"
 
 const SAVED_MATCHES_KEY = "student-dev-hub:saved-matches"
+const COMPANY_LOGOS: Record<string, string> = {
+  accenture: "/images/companies/accenture.png",
+  grab: "/images/companies/grab.svg",
+  shopee: "/images/companies/shopee.png",
+}
 
 // --- Types ---
-type InternshipCard = {
-  type: "internship"
-  id: number
+type OpportunityCard = {
+  type: "opportunity"
+  postingType: "internship" | "job"
+  id: string
   company: string
   role: string
   location: string
@@ -41,7 +48,7 @@ type TeammateCard = {
   image: string
 }
 
-type AnyCard = InternshipCard | TeammateCard
+type AnyCard = OpportunityCard | TeammateCard
 
 type SavedMatch = {
   id: string
@@ -53,11 +60,11 @@ type SavedMatch = {
   skills: string[]
   savedAt: string
   status: "waiting"
-  sourceId: number
+  sourceId: string | number
 }
 
 function toSavedMatch(card: AnyCard): SavedMatch {
-  if (card.type === "internship") {
+  if (card.type === "opportunity") {
     return {
       id: `${card.type}-${card.id}`,
       type: card.type,
@@ -104,78 +111,6 @@ async function saveRightSwipe(card: AnyCard, userId: string) {
 }
 
 // --- Data ---
-const INTERNSHIPS: InternshipCard[] = [
-  {
-    type: "internship",
-    id: 1,
-    company: "Grab",
-    role: "Backend Engineering Intern",
-    location: "Makati, PH",
-    description: "Work on core ride-matching algorithms serving millions of daily users across Southeast Asia.",
-    skills: ["Go", "Python", "Kubernetes"],
-    color: "bg-green-500",
-    initials: "G",
-    logo: "/images/companies/grab.svg",
-  },
-  {
-    type: "internship",
-    id: 2,
-    company: "Shopee",
-    role: "Frontend Intern",
-    location: "Manila, PH",
-    description: "Build high-performance e-commerce UIs used by 200M+ shoppers in the region.",
-    skills: ["React", "TypeScript", "Next.js"],
-    color: "bg-orange-500",
-    initials: "S",
-    logo: "/images/companies/shopee.png",
-  },
-  {
-    type: "internship",
-    id: 3,
-    company: "Accenture Philippines",
-    role: "Full Stack Intern",
-    location: "BGC, Taguig",
-    description: "Develop enterprise solutions for Fortune 500 clients across Southeast Asia.",
-    skills: ["Node.js", "React", "AWS"],
-    color: "bg-purple-600",
-    initials: "A",
-    logo: "/images/companies/accenture.png",
-  },
-  {
-    type: "internship",
-    id: 4,
-    company: "Maya",
-    role: "Mobile Engineering Intern",
-    location: "Makati, PH",
-    description: "Help build the fastest-growing digital bank app in the Philippines.",
-    skills: ["Flutter", "Dart", "Firebase"],
-    color: "bg-blue-500",
-    initials: "M",
-  },
-  {
-    type: "internship",
-    id: 5,
-    company: "UnionBank",
-    role: "AI / ML Intern",
-    location: "Pasig, PH",
-    description: "Research and deploy ML models for fraud detection and credit scoring at scale.",
-    skills: ["Python", "TensorFlow", "MLOps"],
-    color: "bg-red-600",
-    initials: "UB",
-  },
-  {
-    type: "internship",
-    id: 6,
-    company: "Globe Telecom",
-    role: "Cloud Engineering Intern",
-    location: "Mandaluyong, PH",
-    description: "Manage cloud infrastructure for a network serving 80M+ subscribers nationwide.",
-    skills: ["AWS", "Docker", "Terraform"],
-    color: "bg-sky-500",
-    initials: "GL",
-  },
-]
-
 const TEAMMATES: TeammateCard[] = [
   {
     type: "teammate",
@@ -257,6 +192,38 @@ const TEAMMATES: TeammateCard[] = [
   },
 ]
 
+function postingToOpportunityCard(posting: Posting): OpportunityCard {
+  const skills = [...new Set([...posting.requirements, ...posting.preferredSkills])].slice(0, 4)
+  const initials = posting.company
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
+
+  return {
+    type: "opportunity",
+    postingType: posting.type,
+    id: posting.id,
+    company: posting.company,
+    role: posting.title,
+    location: posting.isRemote ? "Remote" : posting.location,
+    description: posting.description,
+    skills,
+    color: posting.type === "job" ? "bg-zinc-900" : "bg-emerald-600",
+    initials: initials || "F",
+    logo: getCompanyLogo(posting.company),
+  }
+}
+
+function getCompanyLogo(company: string) {
+  const normalizedCompany = company.toLowerCase()
+
+  return Object.entries(COMPANY_LOGOS).find(([companyKey]) =>
+    normalizedCompany.includes(companyKey)
+  )?.[1]
+}
+
 // --- SwipeCard ---
 type SwipeCardHandle = { swipe: (dir: "left" | "right") => void }
 type SwipeCardProps = { card: AnyCard; stackIndex: number; onDone: (dir: "left" | "right") => void; onSwipeDir?: (dir: "left" | "right" | null) => void }
@@ -281,7 +248,7 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ card, stackInde
       bounceY.set(stackIndex * 12)
     }
     prevStackIndex.current = stackIndex
-  }, [stackIndex])
+  }, [bounceScale, bounceY, stackIndex])
 
   useMotionValueEvent(x, "change", (latest) => {
     const dir = latest > 20 ? "right" : latest < -20 ? "left" : null
@@ -346,16 +313,16 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ card, stackInde
       )}
 
       <Card className={cn(
-        "overflow-hidden h-[360px] flex flex-col select-none p-0 transition-colors duration-75",
+        "overflow-hidden h-[390px] flex flex-col select-none p-0 transition-colors duration-75",
         swipeDir === "left" && "bg-red-500",
         swipeDir === "right" && "bg-green-500",
       )}>
-        {/* Internship banner / Teammate avatar layout */}
-        {card.type === "internship" ? (
+        {/* Opportunity banner / Teammate avatar layout */}
+        {card.type === "opportunity" ? (
           <>
-            <div className={cn("h-44 shrink-0 flex flex-col items-center justify-center gap-2", card.logo ? "bg-white" : card.color)}>
+            <div className={cn("h-40 shrink-0 flex flex-col items-center justify-center gap-2", card.logo ? "bg-white" : card.color)}>
               {card.logo ? (
-                <Image src={card.logo} alt={card.company} width={120} height={60} className="object-contain" />
+                <Image src={card.logo} alt={card.company} width={150} height={76} className="max-h-24 object-contain" />
               ) : (
                 <>
                   <div className="h-16 w-16 flex items-center justify-center text-white text-xl font-bold bg-white/20 rounded-xl">
@@ -365,17 +332,29 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ card, stackInde
                 </>
               )}
             </div>
-            <div className={cn("p-3 flex flex-col gap-1.5 flex-1", swipeDir ? "text-white" : "text-foreground")}>
+            <div className={cn("flex min-h-0 flex-1 flex-col gap-2 p-4", swipeDir ? "text-white" : "text-foreground")}>
               <div>
+                <Badge variant={swipeDir ? "outline" : "secondary"} className={cn("mb-1 text-[10px] uppercase", swipeDir && "border-white/40 text-white bg-white/10")}>
+                  {card.postingType === "internship" ? "Internship" : "Job"}
+                </Badge>
                 <h2 className="font-semibold leading-tight">{card.role}</h2>
                 <p className={cn("text-xs flex items-center gap-1 mt-0.5", swipeDir ? "text-white/80" : "text-muted-foreground")}>
                   <MapPin className="h-3 w-3 shrink-0" /> {card.location}
                 </p>
               </div>
-              <p className={cn("text-sm leading-relaxed", swipeDir ? "text-white/80" : "text-muted-foreground")}>{card.description}</p>
-              <div className="flex flex-wrap gap-1.5 mt-auto">
-                {card.skills.map((s) => (
-                  <Badge key={s} variant={swipeDir ? "outline" : "secondary"} className={cn("text-[11px] font-normal", swipeDir && "border-white/40 text-white bg-white/10")}>{s}</Badge>
+              <p className={cn("line-clamp-3 text-sm leading-relaxed", swipeDir ? "text-white/80" : "text-muted-foreground")}>{card.description}</p>
+              <div className="mt-auto flex max-h-16 flex-wrap gap-1.5 overflow-hidden">
+                {card.skills.map((s, index) => (
+                  <Badge
+                    key={`${card.id}-${s}-${index}`}
+                    variant={swipeDir ? "outline" : "secondary"}
+                    className={cn(
+                      "max-w-full truncate whitespace-nowrap text-[11px] font-normal leading-4",
+                      swipeDir && "border-white/40 text-white bg-white/10"
+                    )}
+                  >
+                    {s}
+                  </Badge>
                 ))}
               </div>
             </div>
@@ -395,8 +374,8 @@ const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(({ card, stackInde
             <p className={cn("text-sm text-center leading-relaxed", swipeDir ? "text-white/80" : "text-muted-foreground")}>{card.bio}</p>
             {/* Skills */}
             <div className="flex flex-wrap justify-center gap-1.5 mt-auto pb-1">
-              {card.skills.map((s) => (
-                <Badge key={s} variant={swipeDir ? "outline" : "secondary"} className={cn("text-[11px] font-normal", swipeDir && "border-white/40 text-white bg-white/10")}>{s}</Badge>
+              {card.skills.map((s, index) => (
+                <Badge key={`${card.id}-${s}-${index}`} variant={swipeDir ? "outline" : "secondary"} className={cn("text-[11px] font-normal", swipeDir && "border-white/40 text-white bg-white/10")}>{s}</Badge>
               ))}
             </div>
           </div>
@@ -410,15 +389,38 @@ SwipeCard.displayName = "SwipeCard"
 // --- Page ---
 export default function MatchPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<"internships" | "teammates">("internships")
-  const [internshipIndex, setInternshipIndex] = useState(0)
+  const [tab, setTab] = useState<"opportunities" | "teammates">("opportunities")
+  const [opportunityIndex, setOpportunityIndex] = useState(0)
   const [teammateIndex, setTeammateIndex] = useState(0)
+  const [databasePostings, setDatabasePostings] = useState<Posting[]>([])
+  const [listenerError, setListenerError] = useState("")
   const [swipeDir, setSwipeDir] = useState<"left" | "right" | null>(null)
   const [saveNotice, setSaveNotice] = useState<string | null>(null)
   const topCardRef = useRef<SwipeCardHandle>(null)
 
-  const data = tab === "internships" ? INTERNSHIPS : TEAMMATES
-  const currentIndex = tab === "internships" ? internshipIndex : teammateIndex
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "postings"),
+      (snapshot) => {
+        setListenerError("")
+        setDatabasePostings(snapshot.docs.map((doc) => normalizePosting(doc.id, doc.data())))
+      },
+      () => {
+        setListenerError("Live postings are unavailable. Showing mock opportunities for now.")
+      }
+    )
+  }, [])
+
+  const opportunities = useMemo(
+    () =>
+      mergePostings(databasePostings)
+        .filter((posting) => posting.status === "active")
+        .map(postingToOpportunityCard),
+    [databasePostings]
+  )
+
+  const data = tab === "opportunities" ? opportunities : TEAMMATES
+  const currentIndex = tab === "opportunities" ? opportunityIndex : teammateIndex
 
   const handleDone = (dir: "left" | "right") => {
     const swipedCard = data[currentIndex]
@@ -429,10 +431,10 @@ export default function MatchPage() {
           setSaveNotice("Saved on this device. Database sync failed.")
         })
       }
-      setSaveNotice(`${swipedCard.type === "internship" ? swipedCard.company : swipedCard.name} saved. Waiting for a match.`)
+      setSaveNotice(`${swipedCard.type === "opportunity" ? swipedCard.company : swipedCard.name} saved. Waiting for a match.`)
     }
 
-    if (tab === "internships") setInternshipIndex((i) => i + 1)
+    if (tab === "opportunities") setOpportunityIndex((i) => i + 1)
     else setTeammateIndex((i) => i + 1)
     setTimeout(() => {
       setSwipeDir(null)
@@ -453,15 +455,13 @@ export default function MatchPage() {
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Match</h1>
           <p className="text-sm text-muted-foreground">Swipe to find your next opportunity or teammate.</p>
+          {listenerError && <p className="text-xs font-medium text-amber-700">{listenerError}</p>}
           {saveNotice && <p className="text-xs font-medium text-emerald-600">{saveNotice}</p>}
-          <div className="flex justify-center gap-2 pt-3">
-          
-          </div>
         </div>
 
         {/* Tabs */}
         <div className="flex bg-white border border-border p-1">
-          {(["internships", "teammates"] as const).map((t) => (
+          {(["opportunities", "teammates"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -470,7 +470,7 @@ export default function MatchPage() {
                 tab === t ? "bg-black text-white" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+              {t === "opportunities" ? "Opportunities" : "Teammates"}
             </button>
           ))}
         </div>

@@ -69,13 +69,23 @@ export default function EmployerHackathonsPage() {
   const [editingHackathon, setEditingHackathon] = useState<Hackathon | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [listenerError, setListenerError] = useState("");
 
   useEffect(() => {
-    return onSnapshot(collection(db, "hackathons"), (snapshot) => {
-      setDatabaseHackathons(
-        snapshot.docs.map((doc) => normalizeHackathon(doc.id, doc.data()))
-      );
-    });
+    return onSnapshot(
+      collection(db, "hackathons"),
+      (snapshot) => {
+        setListenerError("");
+        setDatabaseHackathons(
+          snapshot.docs.map((doc) => normalizeHackathon(doc.id, doc.data()))
+        );
+      },
+      () => {
+        setListenerError(
+          "Firestore permissions are blocking live hackathons. Showing mock hackathons for now."
+        );
+      }
+    );
   }, []);
 
   const hackathons = useMemo(() => mergeHackathons(databaseHackathons), [databaseHackathons]);
@@ -308,6 +318,12 @@ export default function EmployerHackathonsPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {listenerError && (
+        <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {listenerError}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         {hackathons.map((hackathon) => {
