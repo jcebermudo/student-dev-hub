@@ -28,7 +28,7 @@ import {
   type HackathonLocation,
   type HackathonStatus,
 } from "@/lib/hackathons";
-import { CalendarDays, Loader2, MapPin, Pencil, Trophy, Users } from "lucide-react";
+import { CalendarDays, Eye, Loader2, MapPin, Pencil, Trophy, Users } from "lucide-react";
 
 type HackathonDraft = {
   title: string;
@@ -67,6 +67,7 @@ export default function EmployerHackathonsPage() {
   const [draft, setDraft] = useState<HackathonDraft>(EMPTY_DRAFT);
   const [open, setOpen] = useState(false);
   const [editingHackathon, setEditingHackathon] = useState<Hackathon | null>(null);
+  const [selectedHackathon, setSelectedHackathon] = useState<Hackathon | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [listenerError, setListenerError] = useState("");
@@ -330,7 +331,19 @@ export default function EmployerHackathonsPage() {
           const canEdit = hackathon.createdBy === user?.uid;
 
           return (
-            <Card key={hackathon.id}>
+            <Card
+              key={hackathon.id}
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => setSelectedHackathon(hackathon)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedHackathon(hackathon);
+                }
+              }}
+            >
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -344,7 +357,10 @@ export default function EmployerHackathonsPage() {
                         type="button"
                         size="icon-sm"
                         variant="ghost"
-                        onClick={() => handleEdit(hackathon)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleEdit(hackathon);
+                        }}
                         aria-label={`Edit ${hackathon.title}`}
                       >
                         <Pencil className="h-4 w-4" />
@@ -379,11 +395,110 @@ export default function EmployerHackathonsPage() {
                     </Badge>
                   ))}
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedHackathon(hackathon);
+                  }}
+                >
+                  <Eye className="h-4 w-4" />
+                  View Details
+                </Button>
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      <Dialog open={!!selectedHackathon} onOpenChange={(nextOpen) => !nextOpen && setSelectedHackathon(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          {selectedHackathon && (
+            <>
+              <DialogHeader>
+                <div className="space-y-3 pr-8">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={STATUS_STYLES[selectedHackathon.status]}>
+                      {selectedHackathon.status}
+                    </Badge>
+                    <Badge variant="outline">{selectedHackathon.location}</Badge>
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl">{selectedHackathon.title}</DialogTitle>
+                    <DialogDescription>Hosted by {selectedHackathon.organizer}</DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-5">
+                <p className="text-sm leading-relaxed">{selectedHackathon.description}</p>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <HackathonInfo
+                    icon={<Trophy className="h-4 w-4" />}
+                    label="Prize pool"
+                    value={selectedHackathon.prize}
+                  />
+                  <HackathonInfo
+                    icon={<Users className="h-4 w-4" />}
+                    label="Participants"
+                    value={`${selectedHackathon.participants.toLocaleString()} teams`}
+                  />
+                  <HackathonInfo
+                    icon={<CalendarDays className="h-4 w-4" />}
+                    label="Timeline"
+                    value={selectedHackathon.timeLeft}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="h-4 w-4" />
+                  {selectedHackathon.location === "Online" ? "Online event" : "In-person event"}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Focus areas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedHackathon.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                  <p className="font-medium">Employer note</p>
+                  <p className="text-muted-foreground">
+                    Use this event to spot student teams, sponsor prizes, or invite standout builders into your hiring pipeline.
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setSelectedHackathon(null)}>
+                  Close
+                </Button>
+                {selectedHackathon.createdBy === user?.uid && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const hackathon = selectedHackathon;
+                      setSelectedHackathon(null);
+                      handleEdit(hackathon);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit Hackathon
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -393,6 +508,24 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div className="space-y-2">
       <Label>{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function HackathonInfo({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="border p-3">
+      <div className="mb-2 text-muted-foreground">{icon}</div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-semibold">{value}</p>
     </div>
   );
 }

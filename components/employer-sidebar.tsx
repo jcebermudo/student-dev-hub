@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Briefcase, Users, Trophy, BarChart3, LogOut } from "lucide-react";
+import { LayoutDashboard, Briefcase, Users, Trophy, BarChart3, LogOut, MessageCircle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -24,6 +24,7 @@ const EMPLOYER_NAV = [
   { title: "Dashboard", href: "/employer/dashboard", icon: LayoutDashboard },
   { title: "Postings", href: "/employer/postings", icon: Briefcase },
   { title: "Talent Search", href: "/employer/talent", icon: Users },
+  { title: "Chat", href: "/employer/chat", icon: MessageCircle },
   { title: "Hackathons", href: "/employer/hackathons", icon: Trophy },
   { title: "Analytics", href: "/employer/analytics", icon: BarChart3 },
 ];

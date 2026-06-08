@@ -29,10 +29,9 @@ const NAV_ITEMS = [
   { title: "Saved", href: "/saved", icon: BookmarkCheck },
   { title: "Hackathons", href: "/hackathons", icon: HiTrophy },
   { title: "Chat", href: "/chat", icon: MessageCircle },
-  { title: "Profile", href: "/profile", avatar: true },
-  { title: "Premium", href: "/premium", icon: Sparkles },
   { title: "Badges", href: "/badges", icon: Award },
   { title: "Challenges", href: "/challenges", icon: Code2 },
+  { title: "Profile", href: "/profile", avatar: true },
   
 ]
 
@@ -90,6 +89,14 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="px-2 pb-6">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === "/premium"} tooltip="Premium">
+              <Link href="/premium">
+                <Sparkles className={pathname === "/premium" ? "" : "text-muted-foreground"} />
+                <span>Premium</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={signOut} tooltip="Log out">
               <LogOut className="text-muted-foreground" />
