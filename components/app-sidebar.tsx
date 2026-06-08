@@ -7,6 +7,8 @@ import { HiTrophy, HiSparkles } from "react-icons/hi2"
 import { BookmarkCheck, LogOut, MessageCircle, Sparkles } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/contexts/auth-context"
+import { Award } from "lucide-react";
+import { Code2 } from "lucide-react";
 
 import {
   Sidebar,
@@ -29,6 +31,9 @@ const NAV_ITEMS = [
   { title: "Chat", href: "/chat", icon: MessageCircle },
   { title: "Profile", href: "/profile", avatar: true },
   { title: "Premium", href: "/premium", icon: Sparkles },
+  { title: "Badges", href: "/badges", icon: Award },
+  { title: "Challenges", href: "/challenges", icon: Code2 },
+  
 ]
 
 export function AppSidebar() {

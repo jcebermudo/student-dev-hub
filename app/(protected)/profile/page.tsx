@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Avatar,
   AvatarFallback,
@@ -17,6 +18,8 @@ import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/auth-context";
 import { db } from "@/lib/firebase";
+import { BadgeGrid } from "@/components/badge-display";
+import { getUserBadges, checkAndAwardBadges } from "@/lib/badges";
 
 type Experience = {
   company: string;
@@ -205,12 +208,13 @@ function InstitutionLogo({ item }: { item: Experience | Education }) {
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<StudentProfile>(DEFAULT_PROFILE);
   const [draft, setDraft] = useState<StudentProfile>(DEFAULT_PROFILE);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [userBadges, setUserBadges] = useState<{ badge: any; earnedAt: string }[]>([]);
 
   const displayName = user?.displayName ?? "Nico Reyes";
   const email = user?.email ?? "";
@@ -229,8 +233,10 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
+    
+    // Capture user outside the async function
     const currentUser = user;
-
+    
     async function loadProfile() {
       const userRef = doc(db, "users", currentUser.uid);
       const snapshot = await getDoc(userRef);
@@ -253,23 +259,39 @@ export default function ProfilePage() {
       );
     }
 
-    void loadProfile();
+    loadProfile();
+  }, [user]);
+
+// Load badges
+  useEffect(() => {
+    if (!user) return;
+    
+    // Capture user outside the async function
+    const currentUser = user;
+    
+    async function loadBadges() {
+      const badges = await getUserBadges(currentUser.uid);
+      setUserBadges(badges);
+    }
+    
+    loadBadges();
   }, [user]);
 
   async function saveProfile() {
     if (!user) return;
 
+    const currentUser = user; // Capture user to avoid null issues
     const nextProfile = normalizeProfile(draft);
     setIsSaving(true);
     setSaveMessage(null);
 
     await setDoc(
-      doc(db, "users", user.uid),
+      doc(db, "users", currentUser.uid),
       {
-        uid: user.uid,
-        name: user.displayName,
-        email: user.email,
-        photoURL: user.photoURL,
+        uid: currentUser.uid,
+        name: currentUser.displayName,
+        email: currentUser.email,
+        photoURL: currentUser.photoURL,
         ...nextProfile,
         updatedAt: serverTimestamp(),
       },
@@ -278,13 +300,38 @@ export default function ProfilePage() {
 
     setProfile(nextProfile);
     setDraft(nextProfile);
+    
+    // Check for new badges based on skills
+    const newlyEarned = await checkAndAwardBadges(currentUser.uid, {
+      skill_react: nextProfile.skills.includes("React") ? 100 : 0,
+      skill_python: nextProfile.skills.includes("Python") ? 100 : 0,
+      skill_typescript: nextProfile.skills.includes("TypeScript") ? 100 : 0,
+      skill_go: nextProfile.skills.includes("Go") ? 100 : 0,
+    });
+    
+    if (newlyEarned.length > 0) {
+      const updatedBadges = await getUserBadges(currentUser.uid);
+      setUserBadges(updatedBadges);
+      setSaveMessage(`🎉 Profile saved! You earned ${newlyEarned.length} new badge(s)!`);
+    } else {
+      setSaveMessage("Profile saved!");
+    }
+    
     setIsEditing(false);
     setIsSaving(false);
-    setSaveMessage("Profile saved!");
   }
 
   const activeExperience = draft.experiences[0] ?? EXPERIENCE_OPTIONS[0];
   const activeEducation = draft.education[0] ?? EDUCATION_OPTIONS[0];
+
+  // Show loading while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-16 space-y-8">
@@ -453,6 +500,25 @@ export default function ProfilePage() {
             </Badge>
           ))}
         </div>
+      </section>
+
+      {/* Badges & Achievements Section */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground tracking-wide uppercase">
+            Badges & Achievements
+          </h2>
+          <Link href="/badges">
+            <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              View all
+            </button>
+          </Link>
+        </div>
+        <Card>
+          <CardContent className="pt-5 pb-5 px-5">
+            <BadgeGrid badges={userBadges} />
+          </CardContent>
+        </Card>
       </section>
 
       <Separator />
