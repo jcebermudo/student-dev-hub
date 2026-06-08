@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { Briefcase, Eye, Loader2, Plus, Star, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -69,10 +70,11 @@ const EMPTY_DRAFT: PostingDraft = {
 type PostingFilter = "all" | "active" | "draft" | "closed";
 
 export default function PostingsPage() {
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [databasePostings, setDatabasePostings] = useState<Posting[]>([]);
   const [activeTab, setActiveTab] = useState<PostingFilter>("all");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => searchParams.get("create") === "1");
   const [draft, setDraft] = useState<PostingDraft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Briefcase, Trophy, TrendingUp } from "lucide-react";
+import { Users, Briefcase, Trophy, TrendingUp, Plus, Search } from "lucide-react";
 
 // TODO: Replace with real data from Firestore
 const MOCK_STATS = {
@@ -69,16 +71,25 @@ export default function EmployerDashboard() {
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
-        <CardContent className="flex gap-4">
-          <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm">
-            + Post New Job
-          </button>
-          <button className="px-4 py-2 border rounded-md text-sm">
-            + Create Hackathon
-          </button>
-          <button className="px-4 py-2 border rounded-md text-sm">
-            Browse Talent
-          </button>
+        <CardContent className="flex flex-col gap-3 sm:flex-row">
+          <Button asChild>
+            <Link href="/employer/postings?create=1">
+              <Plus className="h-4 w-4" />
+              Post New Job
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/employer/hackathons?create=1">
+              <Plus className="h-4 w-4" />
+              Create Hackathon
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/employer/talent">
+              <Search className="h-4 w-4" />
+              Browse Talent
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

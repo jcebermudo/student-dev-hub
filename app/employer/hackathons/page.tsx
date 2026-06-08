@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,10 +63,11 @@ const BANNER_OPTIONS = [
 ] as const;
 
 export default function EmployerHackathonsPage() {
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [databaseHackathons, setDatabaseHackathons] = useState<Hackathon[]>([]);
   const [draft, setDraft] = useState<HackathonDraft>(EMPTY_DRAFT);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => searchParams.get("create") === "1");
   const [editingHackathon, setEditingHackathon] = useState<Hackathon | null>(null);
   const [selectedHackathon, setSelectedHackathon] = useState<Hackathon | null>(null);
   const [saving, setSaving] = useState(false);
