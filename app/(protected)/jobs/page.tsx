@@ -17,6 +17,7 @@ const COMPANY_LOGOS: Record<string, string> = {
   accenture: "/images/companies/accenture.png",
   grab: "/images/companies/grab.svg",
   shopee: "/images/companies/shopee.png",
+  unionbank: "/images/companies/unionbank.jpeg",
 }
 
 // --- Types ---
