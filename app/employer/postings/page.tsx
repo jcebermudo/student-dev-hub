@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { Briefcase, Eye, Loader2, Plus, Star, Users } from "lucide-react";
+import { Briefcase, CalendarDays, Eye, Loader2, MapPin, Plus, Star, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,6 +78,7 @@ export default function PostingsPage() {
   const [draft, setDraft] = useState<PostingDraft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [selectedPosting, setSelectedPosting] = useState<Posting | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [listenerError, setListenerError] = useState("");
@@ -386,11 +387,24 @@ export default function PostingsPage() {
                     <TableHead>Min. Score</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Deadline</TableHead>
+                    <TableHead className="text-right">Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPostings.map((posting) => (
-                    <TableRow key={posting.id}>
+                    <TableRow
+                      key={posting.id}
+                      role="button"
+                      tabIndex={0}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedPosting(posting)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedPosting(posting);
+                        }
+                      }}
+                    >
                       <TableCell>
                         <div className="font-medium">{posting.title}</div>
                         <div className="text-xs text-muted-foreground">{posting.company}</div>
@@ -411,6 +425,20 @@ export default function PostingsPage() {
                       <TableCell className="text-muted-foreground">
                         {posting.deadline ? new Date(posting.deadline).toLocaleDateString() : "TBD"}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedPosting(posting);
+                          }}
+                          aria-label={`View ${posting.title} details`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -419,6 +447,77 @@ export default function PostingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!selectedPosting} onOpenChange={(nextOpen) => !nextOpen && setSelectedPosting(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          {selectedPosting && (
+            <>
+              <DialogHeader>
+                <div className="space-y-3 pr-8">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">
+                      {selectedPosting.type === "internship" ? "Internship" : "Job"}
+                    </Badge>
+                    <Badge className={POSTING_STATUS_CONFIG[selectedPosting.status].className}>
+                      {POSTING_STATUS_CONFIG[selectedPosting.status].label}
+                    </Badge>
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl">{selectedPosting.title}</DialogTitle>
+                    <DialogDescription>{selectedPosting.company}</DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-5">
+                <p className="text-sm leading-relaxed">{selectedPosting.description}</p>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <PostingInfo
+                    icon={<Users className="h-4 w-4" />}
+                    label="Applicants"
+                    value={selectedPosting.applicants.toLocaleString()}
+                  />
+                  <PostingInfo
+                    icon={<Star className="h-4 w-4" />}
+                    label="Min. score"
+                    value={`${selectedPosting.minCredibilityScore ?? 0}%`}
+                  />
+                  <PostingInfo
+                    icon={<CalendarDays className="h-4 w-4" />}
+                    label="Deadline"
+                    value={selectedPosting.deadline ? new Date(selectedPosting.deadline).toLocaleDateString() : "TBD"}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="h-4 w-4" />
+                  {selectedPosting.isRemote ? "Remote" : selectedPosting.location}
+                </div>
+
+                <SkillGroup title="Requirements" skills={selectedPosting.requirements} />
+                <SkillGroup title="Preferred skills" skills={selectedPosting.preferredSkills} />
+
+                <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                  <p className="font-medium">Recruiting note</p>
+                  <p className="text-muted-foreground">
+                    Review applicants against the minimum credibility score and preferred skills before shortlisting.
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setSelectedPosting(null)}>
+                  Close
+                </Button>
+                <Button type="button" disabled>
+                  Manage Applicants
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -443,6 +542,43 @@ function StatCard({ title, value, icon }: { title: string; value: string | numbe
         <div className="text-2xl font-bold">{value}</div>
       </CardContent>
     </Card>
+  );
+}
+
+function PostingInfo({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="border p-3">
+      <div className="mb-2 text-muted-foreground">{icon}</div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function SkillGroup({ title, skills }: { title: string; skills: string[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{title}</p>
+      {skills.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {skills.map((skill) => (
+            <Badge key={skill} variant="secondary">
+              {skill}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No {title.toLowerCase()} listed.</p>
+      )}
+    </div>
   );
 }
 
