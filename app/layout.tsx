@@ -10,7 +10,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "StudentDevHub",
+  title: "Fuse",
   description: "A hub for student developers",
 };
 
