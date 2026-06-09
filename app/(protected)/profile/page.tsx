@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Mail } from "lucide-react";
+import { MapPin, Mail, ArrowRight } from "lucide-react";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/auth-context";
@@ -51,23 +51,46 @@ function seededRandom(seed: number) {
   return value - Math.floor(value);
 }
 
-function generateContributions() {
+const TOTAL_CONTRIBUTIONS = 847;
+
+function generateContributions(): { grid: number[][]; max: number } {
   const weeks = 52;
   const days = 7;
+  const total = weeks * days;
+
+  // Generate raw weights — ~35% of days are inactive
+  const weights: number[] = [];
+  for (let i = 0; i < total; i++) {
+    const rand = seededRandom(i + 1);
+    if (rand < 0.35) {
+      weights.push(0);
+    } else {
+      // Use a power curve so most active days are light, with occasional spikes
+      weights.push(Math.pow(rand, 0.3));
+    }
+  }
+
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+
+  // Distribute TOTAL_CONTRIBUTIONS proportionally
+  const counts = weights.map((w) => Math.round((w / weightSum) * TOTAL_CONTRIBUTIONS));
+
+  // Fix rounding drift so the sum is exactly TOTAL_CONTRIBUTIONS
+  const delta = TOTAL_CONTRIBUTIONS - counts.reduce((a, b) => a + b, 0);
+  const maxIdx = counts.indexOf(Math.max(...counts));
+  counts[maxIdx] += delta;
+
+  const max = Math.max(...counts);
+
   const grid: number[][] = [];
   for (let w = 0; w < weeks; w++) {
     const week: number[] = [];
     for (let d = 0; d < days; d++) {
-      const rand = seededRandom(w * days + d + 1);
-      if (rand < 0.35) week.push(0);
-      else if (rand < 0.6) week.push(1);
-      else if (rand < 0.8) week.push(2);
-      else if (rand < 0.93) week.push(3);
-      else week.push(4);
+      week.push(counts[w * days + d]);
     }
     grid.push(week);
   }
-  return grid;
+  return { grid, max };
 }
 
 const CONTRIB_COLORS = [
@@ -78,15 +101,24 @@ const CONTRIB_COLORS = [
   "bg-emerald-700 dark:bg-emerald-300",
 ];
 
+function countToLevel(count: number, max: number): number {
+  if (count === 0) return 0;
+  if (count <= max * 0.15) return 1;
+  if (count <= max * 0.4) return 2;
+  if (count <= max * 0.7) return 3;
+  return 4;
+}
+
 function ContributionGrid() {
-  const grid = generateContributions();
+  const { grid, max } = generateContributions();
   return (
     <div className="grid grid-flow-col grid-rows-7 gap-[3px] w-full" style={{ gridTemplateColumns: `repeat(${grid.length}, minmax(0, 1fr))` }}>
       {grid.map((week, wi) =>
-        week.map((level, di) => (
+        week.map((count, di) => (
           <div
             key={`${wi}-${di}`}
-            className={`aspect-square rounded-[2px] ${CONTRIB_COLORS[level]} transition-colors`}
+            className={`aspect-square rounded-[2px] ${CONTRIB_COLORS[countToLevel(count, max)]} transition-colors`}
+            title={`${count} contribution${count !== 1 ? "s" : ""}`}
           />
         ))
       )}
@@ -218,7 +250,7 @@ export default function ProfilePage() {
 
   const displayName = user?.displayName ?? "Nico Reyes";
   const email = user?.email ?? "";
-  const photoURL = user?.photoURL ?? "/images/people/nico-reyes.jpg";
+  const photoURL = "https://jjf7injz9rxinj2q.public.blob.vercel-storage.com/1777041837041.png";
   const username = email ? email.split("@")[0] : "nico";
   const initials = useMemo(
     () =>
@@ -462,14 +494,74 @@ export default function ProfilePage() {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground tracking-wide uppercase">
-          GitHub Commits
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground tracking-wide uppercase">
+            GitHub Commits
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{TOTAL_CONTRIBUTIONS.toLocaleString()}</span> contributions in the last year
+          </span>
+        </div>
         <Card>
           <CardContent className="py-[2.5px]">
             <ContributionGrid />
           </CardContent>
         </Card>
+        <div className="flex justify-end">
+          <a
+            href="#"
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View more on GitHub <ArrowRight className="h-3 w-3" />
+          </a>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium text-muted-foreground tracking-wide uppercase">
+          Projects
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <p className="font-semibold text-[14px] leading-snug">Support Dashboard</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                A company-facing support platform for managing tickets, monitoring SLAs, and routing issues to the right teams in real time.
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {["React", "TypeScript", "PostgreSQL"].map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-[11px] font-normal px-2 py-0">{tag}</Badge>
+                ))}
+              </div>
+              <a
+                href="#"
+                className="inline-flex items-center gap-1 pt-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                View on GitHub <ArrowRight className="h-3 w-3" />
+              </a>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <p className="font-semibold text-[14px] leading-snug">React Hooks — From Scratch</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                A ground-up reimplementation of core React hooks (useState, useEffect, useMemo, useRef) to explore the fiber reconciler model.
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {["JavaScript", "Compiler Design", "Open Source"].map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-[11px] font-normal px-2 py-0">{tag}</Badge>
+                ))}
+              </div>
+              <a
+                href="#"
+                className="inline-flex items-center gap-1 pt-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                View on GitHub <ArrowRight className="h-3 w-3" />
+              </a>
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       <section className="space-y-3">
